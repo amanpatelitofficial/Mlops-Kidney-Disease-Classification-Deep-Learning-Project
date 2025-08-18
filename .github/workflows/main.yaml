@@ -78,7 +78,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      # ✅ Use same ECR_REGISTRY + ECR_REPOSITORY as build step
       - name: Pull latest image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -86,17 +85,24 @@ jobs:
         run: |
           docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
        
-      - name: Run Docker Image to serve users
+      - name: Run Docker Image (with cleanup)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
         run: |
+          # Stop & remove old container if it exists
+          docker rm -f cnncls || true
+
+          # Remove old image to save space
+          docker rmi $ECR_REGISTRY/$ECR_REPOSITORY:latest || true
+
+          # Run new container
           docker run -d -p 8080:8080 --name=cnncls \
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e AWS_REGION=${{ secrets.AWS_REGION }} \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Clean previous images and containers
+      - name: Clean dangling images & containers
         run: |
           docker system prune -f
